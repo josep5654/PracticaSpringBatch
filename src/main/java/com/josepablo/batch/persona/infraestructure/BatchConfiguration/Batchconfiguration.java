@@ -5,29 +5,49 @@ import com.josepablo.batch.persona.infraestructure.BatchConfiguration.procesor.P
 import com.josepablo.batch.persona.model.Persona;
 import lombok.AllArgsConstructor;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersInvalidException;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.repository.JobExecutionAlreadyRunningException;
+import org.springframework.batch.core.repository.JobInstanceAlreadyCompleteException;
+import org.springframework.batch.core.repository.JobRestartException;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import javax.sql.DataSource;
 
 @Configuration
 @EnableBatchProcessing
-@AllArgsConstructor
+//@AllArgsConstructor
 public class Batchconfiguration {
+    @Autowired
     public JobBuilderFactory jobBuilderFactory;
+    @Autowired
     public StepBuilderFactory stepBuilderFactory;
+    @Autowired
+    JobLauncher jobLauncher;
+    @Autowired
+    Job job;
+
+    @Scheduled(fixedRate = 5000)
+    public void repeatTask() throws JobInstanceAlreadyCompleteException, JobExecutionAlreadyRunningException, JobParametersInvalidException, JobRestartException {
+        jobLauncher.run(job, new JobParameters());
+    }
+
 
     @Bean
     public FlatFileItemReader<Persona> reader() {
@@ -48,7 +68,7 @@ public class Batchconfiguration {
     }
 
     @Bean
-    public JdbcBatchItemWriter<Persona>writer(DataSource dataSource){
+    public JdbcBatchItemWriter<Persona> writer(DataSource dataSource) {
         return new JdbcBatchItemWriterBuilder<Persona>()
                 .itemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>())
                 .sql("INSERT INTO persona (nombre,apellido,anio)VALUES(:nombre,:apellido,:anio)")
@@ -57,17 +77,18 @@ public class Batchconfiguration {
     }
 
     @Bean
-    public Job importPersonaJob(JobListener jobListener, Step step){
+    public Job importPersonaJob(JobListener jobListener, Step step) {
         return jobBuilderFactory.get("importPersonaJob")
                 .incrementer(new RunIdIncrementer())
                 .listener(jobListener)
                 .flow(step)
                 .end().build();
     }
+
     @Bean
-    public Step step1(JdbcBatchItemWriter<Persona> writer){
-        return  stepBuilderFactory.get("step1")
-                .<Persona,Persona>chunk(10)
+    public Step step1(JdbcBatchItemWriter<Persona> writer) {
+        return stepBuilderFactory.get("step1")
+                .<Persona, Persona>chunk(10)
                 .reader(reader())
                 .processor(processor())
                 .writer(writer)
